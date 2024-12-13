@@ -1,7 +1,7 @@
 """
     CodeCraft PMS Project
     파일명 : account_DB.py
-    마지막 수정 날짜 : 2024/11/29
+    마지막 수정 날짜 : 2024/12/13
 """
 
 import pymysql
@@ -123,6 +123,81 @@ def validate_user_token(id, Token):
             return False
     except Exception as e:
         print(f"Error [validate_user_token] : {e}")
+        return e
+    finally:
+        cur.close()
+        connection.close()
+
+# ------------------------------ 관리자 계정 ------------------------------ #
+# 관리자(교수) 로그인 정보 확인 함수
+def validate_admin(id, pw):
+    connection = db_connect()
+    cur = connection.cursor(pymysql.cursors.DictCursor)
+
+    try:
+        cur.execute("SELECT a_id, a_pw FROM admin WHERE a_id = %s", (id,))
+        row = cur.fetchone()
+        if row and id == row['a_id'] and pw == row['a_pw']:
+            return row['a_id']
+        else:
+            return None
+    except Exception as e:
+        print(f"Error [validate_admin] : {e}")
+        raise e
+    finally:
+        cur.close()
+        connection.close()
+
+# 관리자(교수) 로그인 성공 후 토큰(세션)을 DB에 저장하는 함수
+# 관리자가 로그인에 성공하면, 관리자의 ID와 생성된 토큰을 매개 변수로 받아서 해당 관리자의 현재 세션을 유지하기 위한 토큰을 저장한다
+def save_signin_admin_token(id, Token):
+    connection = db_connect()
+    cur = connection.cursor(pymysql.cursors.DictCursor)
+
+    try:
+        cur.execute("UPDATE admin SET a_token = %s WHERE a_id = %s", (Token, id))
+        connection.commit()
+        return True
+    except Exception as e:
+        connection.rollback()
+        print(f"Error [save_signin_admin_token] : {e}")
+        return e
+    finally:
+        cur.close()
+        connection.close()
+
+# 관리자(교수) 로그아웃 함수
+def signout_admin(Token):
+    connection = db_connect()
+    cur = connection.cursor(pymysql.cursors.DictCursor)
+
+    try:
+        cur.execute("UPDATE admin SET a_token = NULL WHERE a_token = %s", (Token,))
+        connection.commit()
+        return True
+    except Exception as e:
+        connection.rollback()
+        print(f"Error [signout_admin] : {e}")
+        return e
+    finally:
+        cur.close()
+        connection.close()
+
+# 관리자(교수) 토큰 확인 함수
+def validate_admin_token(id, Token):
+    connection = db_connect()
+    cur = connection.cursor(pymysql.cursors.DictCursor)
+
+    try:
+        cur.execute("SELECT a_token FROM admin WHERE a_id = %s", (id,))
+        stored_token = cur.fetchone()
+
+        if Token == stored_token['a_token']:
+            return True
+        else:
+            return False
+    except Exception as e:
+        print(f"Error [validate_admin_token] : {e}")
         return e
     finally:
         cur.close()
