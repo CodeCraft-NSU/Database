@@ -1,7 +1,7 @@
 """
     CodeCraft PMS Project
     파일명 : project_DB.py
-    마지막 수정 날짜 : 2025/01/31
+    마지막 수정 날짜 : 2025/02/12
 """
 
 import pymysql
@@ -21,10 +21,10 @@ def init_project(payload, pid):
 
     try:
         add_project = """
-        INSERT INTO project(p_no, p_name, p_content, p_method, p_memcount, p_start, p_end, p_wizard, dno, f_no)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO project(p_no, p_name, p_content, p_method, p_memcount, p_start, p_end, p_subject, p_wizard, dno, f_no)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
-        cur.execute(add_project, (pid, payload.pname, payload.pdetails, payload.pmm, payload.psize, p_startD, p_endD, payload.wizard, 10, payload.prof_id))
+        cur.execute(add_project, (pid, payload.pname, payload.pdetails, payload.pmm, payload.psize, p_startD, p_endD, payload.subject, payload.wizard, 10, payload.prof_id))
         cur.execute("CALL create_sequence(%s)", (pid,))
         connection.commit()
         return True
@@ -55,12 +55,13 @@ def edit_project(payload):
             p_memcount = %s,
             p_start = %s,
             p_end = %s,
+            p_subject = %s,
             p_wizard = %s,
             dno = %s,
             f_no = %s            
         WHERE p_no = %s
         """
-        cur.execute(edit_project, (payload.pname, payload.pdetails, payload.pmm, payload.psize, p_startD, p_endD, payload.wizard, 10, payload.prof_id, payload.pid))
+        cur.execute(edit_project, (payload.pname, payload.pdetails, payload.pmm, payload.psize, p_startD, p_endD, payload.subject, payload.wizard, 10, payload.prof_id, payload.pid))
         connection.commit()
         return True
     except Exception as e:
@@ -79,7 +80,7 @@ def fetch_project_info(univ_id):
 
     try:
         fetch_project_info = """
-        SELECT p.p_no, p.p_name, p.p_content, p.p_method, p.p_memcount, p.p_start, p.p_end, p.p_wizard
+        SELECT p.p_no, p.p_name, p.p_content, p.p_method, p.p_memcount, p.p_start, p.p_end, p.p_subject, p.p_wizard
         FROM project p, project_user u
         WHERE p.p_no = u.p_no
         AND u.s_no = %s
@@ -102,7 +103,7 @@ def fetch_project_info_for_professor(f_no):
 
     try:
         fetch_project_info_for_professor = """
-        SELECT p_no, p_name, p_content, p_method, p_memcount, p_start, p_end, p_wizard
+        SELECT p_no, p_name, p_content, p_method, p_memcount, p_start, p_end, p_subject, p_wizard
         FROM project
         WHERE p_no IN (SELECT p_no
             FROM project
@@ -113,6 +114,23 @@ def fetch_project_info_for_professor(f_no):
         return result
     except Exception as e:
         print(f"Error [fetch_project_info_for_professor] : {e}")
+        return e
+    finally:
+        cur.close()
+        connection.close()
+
+# 프로젝트의 담당 교수 이름을 조회하는 함수
+# 프로젝트 번호를 매개 변수로 받는다
+def fetch_project_professor_name(pid):
+    connection = db_connect()
+    cur = connection.cursor(pymysql.cursors.DictCursor)
+
+    try:
+        cur.execute("SELECT f_name FROM professor WHERE f_no = (SELECT f_no FROM project WHERE p_no = %s)", (pid,))
+        result = cur.fetchone()
+        return result
+    except Exception as e:
+        print(f"Error [fetch_project_professor_name] : {e}")
         return e
     finally:
         cur.close()
@@ -159,8 +177,8 @@ def add_project_user(pid, univ_id, permission, role):
 
     try:
         add_project_user = """
-        INSERT INTO project_user(p_no, s_no, permission, role, grade, comment)
-        VALUES (%s, %s, %s, %s, NULL, NULL)
+        INSERT INTO project_user(p_no, s_no, permission, role, comment)
+        VALUES (%s, %s, %s, %s, NULL)
         """
         cur.execute(add_project_user, (pid, univ_id, permission, role))
         connection.commit()
@@ -239,6 +257,32 @@ def fetch_project_user(pid):
         cur.close()
         connection.close()
 
+# 프로젝트별로 실제 참여하고 있는 팀원 수를 조회하는 함수
+# 학번을 매개 변수로 받아서, 현재 사용자가 참여하고 있는 모든 프로젝트에 대하여 프로젝트별로 GROUP BY 및 COUNT 함수를 사용하여 팀원 수를 조회한다
+def fetch_project_user_count(univ_id):
+    connection = db_connect()
+    cur = connection.cursor(pymysql.cursors.DictCursor)
+
+    try:
+        fetch_project_user_count = """
+        SELECT p_no, COUNT(*) AS count
+        FROM project_user
+        WHERE p_no IN (SELECT p_no
+        	FROM project_user
+        	WHERE s_no = %s)
+        GROUP BY p_no
+        ORDER BY p_no
+        """
+        cur.execute(fetch_project_user_count, (univ_id,))
+        result = cur.fetchall()
+        return result
+    except Exception as e:
+        print(f"Error [fetch_project_user_count] : {e}")
+        return e
+    finally:
+        cur.close()
+        connection.close()
+
 # 프로젝트의 중요 정보를 수정할 때 사용자의 권한(PM 권한)을 확인하는 함수
 # 프로젝트 번호와 학번을 매개 변수로 받는다
 def validate_pm_permission(pid, univ_id):
@@ -301,7 +345,7 @@ def fetch_project_for_LLM(pid):
     cur = connection.cursor()
 
     try:
-        cur.execute("SELECT p_no, p_name, p_content, p_method, p_memcount, p_start, p_end FROM project WHERE p_no = %s", (pid,))
+        cur.execute("SELECT p_no, p_name, p_content, p_method, p_memcount, p_start, p_end, p_subject FROM project WHERE p_no = %s", (pid,))
         project = cur.fetchone()
 
         cur.execute("SELECT w_name, w_person, w_start, w_end, w_checked FROM work WHERE p_no = %s", (pid,))
