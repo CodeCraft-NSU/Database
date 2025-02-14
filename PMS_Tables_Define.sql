@@ -152,10 +152,12 @@ CREATE TABLE doc_summary (
 
 CREATE TABLE doc_test (
  doc_t_no INT NOT NULL PRIMARY KEY AUTO_INCREMENT,
+ doc_t_group1 VARCHAR(30) NULL,
  doc_t_name TEXT NOT NULL,
  doc_t_start DATE NOT NULL,
  doc_t_end DATE NOT NULL,
  doc_t_pass BOOLEAN NOT NULL,
+ doc_t_group1no INT NULL,
  p_no INT NOT NULL
 );
 
